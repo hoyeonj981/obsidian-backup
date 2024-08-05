@@ -1,0 +1,117 @@
+created at : 2024-03-18 21:48
+
+#### tags
+
+#
+
+--- 
+
+- WebSecurityConfigurerAdapter
+	- abstract class를 상속해서 원하는 필터 기능을 추가
+	- 디자인 패턴으로는 어떤 모양?
+		- 탬플릿 메서드 패턴
+	- 6버전 부터는 빈 컴포넌트로 관리되는 방식으로 변경
+		- 이게 좀 더 스프링 스럽다.
+	- 상속으로 구현하는 모습이 마치 템플릿 메서드 패턴과 유사하다.
+		- configure를 구현하면 해당 방법으로 동작하지만, 아닐 경우 기본 구현체로 동작
+		- 보안 설정 과정에 일련의 순서가 존재한다.
+- spring security architecture
+	- 하나의 http 요청에 대해서 필터링 처리를 담당
+		- 요청이 서블릿에 들어가기 전에 처리됨
+		- filterChain 클래스의 doFilter를 통해서 체인이 연결됨.
+	- 서블릿 필터와 유사한 방식으로 동작한다.
+	- servlet fiter
+		- http 요청을 필터링
+	- DelegatingFilterProxy
+		- 위 서블릿 필터를 빈으로 관리하는 버전
+		- 스프링에서 제공 (시큐리티 아님)
+	- FilterChainProxy
+		- 빈으로 등록이 되어서 사용됨.
+		- DelegatingFilterProxy를 통해서 실행
+		- 시큐리티에서 제공하는 기능
+	- SecurityFilterChain
+		- 실제로 필터링이 되는 로직이 담긴 객체
+	- FilterChainProxy의 동작 과정
+		- 요청이 SecurityFilterChain을 탈 요청인지 확인함
+		- FIlterChainProxy는 ServletFilter와 달리 더 유연하다.
+			- RequestMatcher가 HttpRequest를 받고 조건에 일치할 경우 필터링을 하기 때문
+			- servlet filter는 url에 대해서만 필터링을 한다.
+- spring security 구성요소
+	- WebsecurityConfig
+		- 보안 설정을 담당
+	- UserDetails
+		- 인증을 위한 정보를 담고 있는 객체 (계정 정보, 비번 등)
+	- UserDetailsService
+		- 유저 정보를 읽어 들여 UserDetails를 반환 담당
+	- UsernamePasswordAuthenticationToken
+		- username, password를 담고 있는 객체
+	- AuthenticationManager
+		- DaoAuthenticationProvider 를 가지고 UsernamePasswordAuthenticationToken을 검증함.
+		- 이후 인인증된 객체를 반환한다. (인가 정보를 포함)
+	- OncePerRequestFilter
+		- 리퀘스트 마다 1번은 실행되는 API
+		- 파싱, JWT 검증, 인가 확인, UserDetails 로딩 담당
+		- UserDetailsService의 HTTP 요청 버전?
+	- AuthenticationEntryPoint
+		- 인증 에러를 잡는다.
+		- 응답에 권한 증서?(credentials)을 담는 역할을 한다.
+- Excpetion은 어떻게 처리되는가
+	- ExceptionTranslationFilter에서 AuthenticationException과 AccessDeniedException을 처리한다.
+	- AuthenticationException은 SecurityContext를 비우고, http 헤더에 기존 요청정보를 넣은 뒤 캐싱해서 보관한다. 이후 AuthenticationEntryPoint가 처리한다.
+		- 리다이렉트하거나 헤더에 정보를 넣어주거나 등
+	- AccessDeniedException일 경우 그냥 예외가 발생해 접근이 거부되고 AccessDeniedHandler가 처리함
+	- 왜 캐싱을 할까?
+		- 캐싱 정보는 세션에 저장이 된다.
+		- 사람들이 보통 입력할 때 실수를 하니까 그런 것이 아닐까?
+			- 하지만 세션에 저장하기 때문에 너무 빈번한 요청은 세션 저장소에 부담이 될 수 있다. (캐싱을 안하는 옵션이 존재	)
+- Authentication에 사용되는 구성요소
+	- SecurityContextHolder
+		- SecurityContext를 가지고 있는 홀더.
+		- threadlocal, global, inheritable threadlocal 등 처리 중인 스레드가 사용할 정보를 담고 있는 곳
+	- SecurityContext
+		- 현 사용자의 Authentication을 가지고 있는 객체
+	- SecurityContextHolderStrategy
+		- SecurityContext를 래핑한 객체.
+		- holder의 정보가 threadlocal, global, inhertable인지 결정한 구현체가 담기는 곳.
+	- Authentication
+		- 사용자에게 권한을 부여할 때 사용.
+		- 현재 사용자가 인증된 사용자임을 나타냄.
+		- ThreadLocal에 SecurityContext가 저장되어 있고 이 안에는 Authentication 객체가 존재한다. 해당 객체를 통해서 현재 스레드에서 처리되는 사용자가 권한이 있는 사람인지 체크할 수 있다. 단, ThreadLocal을 사용하기 때문에 스레드 풀에 반환되기 전에 비울 필요가 있다. 이는 FilterChainProxy이 담당해서 처리한다.
+	- GrantedAuthority
+		- Authentication 구현체 안에 담긴 권한에 대한 원칙?
+		- roles, scopes 등
+	- AuthenticationManager
+		- 시큐리티 필터 당 어떻게 authentication을 적용할지 결정하는 곳
+	- PoviderManager
+		- AuthenticationManager를 구현한 객체
+	- AuthenticationProvider
+		- ProviderManager에서 사용하는 실제 인증 절차 수행
+	- AbstractAuthenticationProcessingFilter
+		- 요청 당 인증을 처리할 때 사용하는 기본 필터.
+- Authentication 과정
+	- SecurityFilterChain에서 AbstractAuthenticationProcessingFIlter가 동작
+	- AbstractAuthenticationProcessingFIlter에서 HttpServletRequest를 통해 Authentication 객체 생성
+		- Authentication 객체는 AbstractAuthenticationProcessingFIlter를 상속한 구현체에 따라서 다르게 만들어질 수 있다.
+	- Authentication은 AuthenticationManager에게 넘겨진다.
+	- if fail
+		- SecurityContextHolder를 청소함
+		- RememberServices.loginfail 메서드 호출
+			- 만약 설정에서 rememberme를 지정하지 않았다면 아무런 동작이 없음
+		- AuthenticationFailHandler가 호출
+	- if success
+		- SessionAuthenticationStrategy에게 새로운 로그인을 알림
+		- Authentication이 SecurityContextHolder에게 지정됨
+		- RememberMeServices.loginSuccess 호출
+			- 없다면 아무일도 하지 않음
+		- ApplicationEventPublisher에게 InteractiveAuthenticationSuccessEvent가 전달됨
+		- AuthenticationSuccessHandler가 호출
+		- 
+-  authorization
+	- AccessDecisionManger가 관리한다.
+	- 이후 AuthrorizationManger으로 변경되었다.
+	- 인가에 대한 방법은 vote 방법이 있다.
+	- 다수결, 하나라도 허가날 경우, 모두 허가나야 할 경우, 커스텀으로 구성할 수 있다.
+### References
+---
+[]()
+https://gregor77.github.io/2021/05/18/spring-security-03/
